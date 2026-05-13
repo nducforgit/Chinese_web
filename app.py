@@ -5,7 +5,7 @@ import os
 os.environ["DATABASE_URL"] = st.secrets["DATABASE_URL"]
 _gemini_key = st.secrets["GEMINI_API_KEY"]
 
-from database import init_db, auto_seed, get_due_words, get_all_words, update_review, delete_word, get_stats
+from database import init_db, auto_seed, get_due_words, get_all_words, batch_update_reviews, delete_word, get_stats
 
 _genai_client = genai.Client(api_key=_gemini_key) if _gemini_key else None
 
@@ -406,11 +406,14 @@ if page in HSK_PAGES:
 
                 if submit_btn:
                     results = {}
+                    pairs = []
                     for w in words_today:
                         user_ans = st.session_state.get(f"ans_{level}_{w['id']}", "").strip().lower()
                         correct = w["meaning"].lower()
                         keywords = [k.strip() for k in correct.replace(",", "/").split("/")]
-                        is_correct = any(k in user_ans or user_ans in k for k in keywords if k)
+                        is_correct = bool(user_ans) and any(
+                            k in user_ans or user_ans in k for k in keywords if k
+                        )
                         results[w["id"]] = {
                             "user": st.session_state.get(f"ans_{level}_{w['id']}", "").strip(),
                             "correct": w["meaning"],
@@ -418,8 +421,8 @@ if page in HSK_PAGES:
                             "hanzi": w["hanzi"],
                             "pinyin": w["pinyin"],
                         }
-                        update_review(w["id"], 5 if is_correct else 1)
-
+                        pairs.append((w["id"], 5 if is_correct else 1))
+                    batch_update_reviews(pairs)
                     st.session_state[results_key] = results
                     st.session_state[submitted_key] = True
                     st.rerun()

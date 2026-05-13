@@ -181,6 +181,41 @@ def update_review(word_id: int, quality: int):
     release_conn(conn)
 
 
+def batch_update_reviews(word_quality_pairs: list[tuple[int, int]]):
+    """Cập nhật nhiều từ trong 1 transaction. word_quality_pairs = [(word_id, quality), ...]"""
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=RealDictCursor)
+    ids = [wid for wid, _ in word_quality_pairs]
+    c.execute("SELECT * FROM reviews WHERE word_id = ANY(%s)", (ids,))
+    reviews = {r["word_id"]: dict(r) for r in c.fetchall()}
+
+    now = datetime.now()
+    for word_id, quality in word_quality_pairs:
+        r = reviews[word_id]
+        easiness = max(1.3, r["easiness"] + 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
+        repetitions = r["repetitions"]
+        interval = r["interval"]
+        if quality < 3:
+            repetitions, interval = 0, 1
+        else:
+            if repetitions == 0:
+                interval = 1
+            elif repetitions == 1:
+                interval = 6
+            else:
+                interval = round(interval * easiness)
+            repetitions += 1
+        next_review = now + timedelta(days=interval)
+        c.execute("""
+            UPDATE reviews SET interval=%s, repetitions=%s, easiness=%s,
+                next_review=%s, last_review=NOW()
+            WHERE word_id=%s
+        """, (interval, repetitions, easiness, next_review, word_id))
+
+    conn.commit()
+    release_conn(conn)
+
+
 def delete_word(word_id: int):
     conn = get_conn()
     c = conn.cursor()
