@@ -1,9 +1,7 @@
 import streamlit as st
 from google import genai
 import os
-import streamlit as st
 
-# Đọc secrets (hoạt động cả local lẫn Streamlit Cloud)
 os.environ["DATABASE_URL"] = st.secrets["DATABASE_URL"]
 _gemini_key = st.secrets["GEMINI_API_KEY"]
 
@@ -43,9 +41,13 @@ def ask_gemini(prompt: str) -> str:
         f"(Chi tiết: {last_err})"
     )
 
-# --- Khởi tạo ---
-init_db()
-auto_seed()
+# --- Khởi tạo (cache_resource = chỉ chạy 1 lần khi server start, không chạy lại mỗi render) ---
+@st.cache_resource
+def setup_db():
+    init_db()
+    auto_seed()
+
+setup_db()
 
 st.set_page_config(
     page_title="Tiếng Trung - Mai Hương",

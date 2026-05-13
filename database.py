@@ -3,7 +3,19 @@ import random
 from datetime import datetime, timedelta, timezone
 
 import psycopg2
+import psycopg2.pool
 from psycopg2.extras import RealDictCursor, execute_values
+
+_pool: psycopg2.pool.ThreadedConnectionPool | None = None
+
+
+def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
+    global _pool
+    if _pool is None:
+        _pool = psycopg2.pool.ThreadedConnectionPool(
+            1, 5, os.environ["DATABASE_URL"]
+        )
+    return _pool
 
 DAILY_REVIEW_LIMIT = 20
 TZ_GMT7 = timezone(timedelta(hours=7))
@@ -19,7 +31,11 @@ def _today_utc_range():
 
 
 def get_conn():
-    return psycopg2.connect(os.environ["DATABASE_URL"])
+    return _get_pool().getconn()
+
+
+def release_conn(conn):
+    _get_pool().putconn(conn)
 
 
 def init_db():
@@ -61,7 +77,7 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_words_hsk ON words(hsk_level)")
 
     conn.commit()
-    conn.close()
+    release_conn(conn)
 
 
 def add_word(hanzi: str, pinyin: str, meaning: str,
@@ -79,7 +95,7 @@ def add_word(hanzi: str, pinyin: str, meaning: str,
     word_id = c.fetchone()[0]
     c.execute("INSERT INTO reviews (word_id) VALUES (%s)", (word_id,))
     conn.commit()
-    conn.close()
+    release_conn(conn)
 
 
 def _level_clause(hsk_level):
@@ -102,7 +118,7 @@ def get_due_words(hsk_level: str = None):
         ORDER BY r.next_review ASC
     """, (now, *params))
     rows = [dict(r) for r in c.fetchall()]
-    conn.close()
+    release_conn(conn)
     if len(rows) > DAILY_REVIEW_LIMIT:
         rows = random.sample(rows, DAILY_REVIEW_LIMIT)
     return rows
@@ -121,7 +137,7 @@ def get_all_words(hsk_level: str = None):
         ORDER BY w.created_at DESC
     """, params)
     rows = [dict(r) for r in c.fetchall()]
-    conn.close()
+    release_conn(conn)
     for r in rows:
         if isinstance(r.get("next_review"), datetime):
             r["next_review"] = r["next_review"].isoformat()
@@ -162,7 +178,7 @@ def update_review(word_id: int, quality: int):
     """, (interval, repetitions, easiness, next_review, word_id))
 
     conn.commit()
-    conn.close()
+    release_conn(conn)
 
 
 def delete_word(word_id: int):
@@ -171,7 +187,7 @@ def delete_word(word_id: int):
     c.execute("DELETE FROM reviews WHERE word_id = %s", (word_id,))
     c.execute("DELETE FROM words WHERE id = %s", (word_id,))
     conn.commit()
-    conn.close()
+    release_conn(conn)
 
 
 def auto_seed():
@@ -179,7 +195,7 @@ def auto_seed():
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM words")
     if c.fetchone()[0] > 0:
-        conn.close()
+        release_conn(conn)
         return
 
     from hsk_data import HSK2, HSK3, HSK4
@@ -201,7 +217,7 @@ def auto_seed():
                        [(wid,) for wid in word_ids])
 
     conn.commit()
-    conn.close()
+    release_conn(conn)
 
 
 def get_stats(hsk_level: str = None):
@@ -228,5 +244,5 @@ def get_stats(hsk_level: str = None):
     """, (start_utc, end_utc, *params))
     learned = c.fetchone()[0]
 
-    conn.close()
+    release_conn(conn)
     return {"total": total, "due": due, "learned": learned}
