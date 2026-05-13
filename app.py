@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from google import genai
 import os
 
@@ -236,7 +237,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- Inject TTS function vào parent window (chạy 1 lần mỗi render) ---
-st.components.v1.html("""
+components.html("""
 <script>
 parent.window.speakChinese = function(text) {
     parent.window.speechSynthesis.cancel();
