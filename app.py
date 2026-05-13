@@ -235,6 +235,19 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- Inject TTS function vào parent window (chạy 1 lần mỗi render) ---
+st.components.v1.html("""
+<script>
+parent.window.speakChinese = function(text) {
+    parent.window.speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN';
+    u.rate = 0.85;
+    parent.window.speechSynthesis.speak(u);
+};
+</script>
+""", height=0)
+
 # --- Sidebar ---
 with st.sidebar:
     st.markdown("## 🌸 Xin chào, **Mai Hương**!")
@@ -389,9 +402,14 @@ if page in HSK_PAGES:
                         col_word, col_input = st.columns([1, 2])
                         with col_word:
                             st.markdown(f"""
-                            <div style='background:#fce4ec;border-radius:10px;padding:10px 14px;margin:4px 0'>
-                                <span style='font-size:28px;color:#c2185b;font-weight:bold'>{w['hanzi']}</span>
-                                <span style='color:#e91e8c;margin-left:10px'>{w['pinyin']}</span>
+                            <div style='background:#fce4ec;border-radius:10px;padding:10px 14px;margin:4px 0;display:flex;align-items:center'>
+                                <div>
+                                    <span style='font-size:28px;color:#c2185b;font-weight:bold'>{w['hanzi']}</span>
+                                    <span style='color:#e91e8c;margin-left:10px'>{w['pinyin']}</span>
+                                </div>
+                                <button onclick="speakChinese('{w['hanzi']}')"
+                                    style='margin-left:auto;background:none;border:none;font-size:22px;cursor:pointer;padding:4px 8px;border-radius:8px;'
+                                    title="Nghe phát âm">🔊</button>
                             </div>
                             """, unsafe_allow_html=True)
                         with col_input:
@@ -450,11 +468,16 @@ if page in HSK_PAGES:
                     bg = "#e8f5e9" if r["is_correct"] else "#fce4ec"
                     border = "#66bb6a" if r["is_correct"] else "#e91e8c"
                     st.markdown(f"""
-                    <div style='background:{bg};border-left:4px solid {border};border-radius:0 10px 10px 0;padding:10px 16px;margin:6px 0'>
-                        {icon} <strong style='font-size:20px;color:#c2185b'>{r['hanzi']}</strong>
-                        <span style='color:#e91e8c;margin-left:8px'>{r['pinyin']}</span><br>
-                        <span style='color:#555'>Bạn trả lời: <em>{r['user'] or '(để trống)'}</em></span><br>
-                        <span style='color:#2e7d32'><strong>Đáp án: {r['correct']}</strong></span>
+                    <div style='background:{bg};border-left:4px solid {border};border-radius:0 10px 10px 0;padding:10px 16px;margin:6px 0;display:flex;align-items:flex-start'>
+                        <div style='flex:1'>
+                            {icon} <strong style='font-size:20px;color:#c2185b'>{r['hanzi']}</strong>
+                            <span style='color:#e91e8c;margin-left:8px'>{r['pinyin']}</span><br>
+                            <span style='color:#555'>Bạn trả lời: <em>{r['user'] or '(để trống)'}</em></span><br>
+                            <span style='color:#2e7d32'><strong>Đáp án: {r['correct']}</strong></span>
+                        </div>
+                        <button onclick="speakChinese('{r['hanzi']}')"
+                            style='background:none;border:none;font-size:20px;cursor:pointer;padding:4px 8px;'
+                            title="Nghe phát âm">🔊</button>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -599,6 +622,11 @@ elif page == "📋 Danh sách từ":
         for w in words:
             badge = f"`{w.get('hsk_level', '?')}`"
             with st.expander(f"{badge} **{w['hanzi']}** ({w['pinyin']}) — {w['meaning']}"):
+                st.markdown(f"""
+                    <button onclick="speakChinese('{w['hanzi']}')"
+                        style='background:#f48fb1;border:none;color:white;font-size:16px;cursor:pointer;padding:6px 14px;border-radius:8px;margin-bottom:8px;'>
+                        🔊 Nghe phát âm
+                    </button>""", unsafe_allow_html=True)
                 if w["example_zh"]:
                     st.write(f"Ví dụ: *{w['example_zh']}*")
                 if w["example_vn"]:
