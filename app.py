@@ -41,6 +41,12 @@ def ask_gemini(prompt: str) -> str:
         f"(Chi tiết: {last_err})"
     )
 
+st.set_page_config(
+    page_title="Tiếng Trung - Mai Hương",
+    page_icon="🌸",
+    layout="wide"
+)
+
 # --- Khởi tạo (cache_resource = chỉ chạy 1 lần khi server start, không chạy lại mỗi render) ---
 @st.cache_resource
 def setup_db():
@@ -48,12 +54,6 @@ def setup_db():
     auto_seed()
 
 setup_db()
-
-st.set_page_config(
-    page_title="Tiếng Trung - Mai Hương",
-    page_icon="🌸",
-    layout="wide"
-)
 
 # --- PWA meta tags + icon ---
 _icon_b64 = ""
