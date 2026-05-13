@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 from google import genai
 import os
 
@@ -236,18 +235,17 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- Inject TTS function vào parent window (chạy 1 lần mỗi render) ---
-components.html("""
-<script>
-parent.window.speakChinese = function(text) {
-    parent.window.speechSynthesis.cancel();
-    var u = new SpeechSynthesisUtterance(text);
-    u.lang = 'zh-CN';
-    u.rate = 0.85;
-    parent.window.speechSynthesis.speak(u);
-};
-</script>
-""", height=0)
+def tts_button(hanzi: str):
+    """Nút loa phát âm, chạy trực tiếp trong trang (không dùng iframe)."""
+    safe = hanzi.replace("\\", "\\\\").replace("'", "\\'")
+    st.markdown(
+        f'<button onclick="(function(){{window.speechSynthesis.cancel();'
+        f'var u=new SpeechSynthesisUtterance(\'{safe}\');'
+        f'u.lang=\'zh-CN\';u.rate=0.85;window.speechSynthesis.speak(u);}})();" '
+        f'style="background:none;border:none;font-size:22px;cursor:pointer;'
+        f'padding:4px 8px;border-radius:8px;" title="Phát âm">🔊</button>',
+        unsafe_allow_html=True
+    )
 
 # --- Sidebar ---
 with st.sidebar:
@@ -400,19 +398,16 @@ if page in HSK_PAGES:
             if not submitted:
                 with st.form(f"vocab_form_{level}"):
                     for i, w in enumerate(words_today):
-                        col_word, col_input = st.columns([1, 2])
+                        col_word, col_spk, col_input = st.columns([2, 1, 3])
                         with col_word:
                             st.markdown(f"""
-                            <div style='background:#fce4ec;border-radius:10px;padding:10px 14px;margin:4px 0;display:flex;align-items:center'>
-                                <div>
-                                    <span style='font-size:28px;color:#c2185b;font-weight:bold'>{w['hanzi']}</span>
-                                    <span style='color:#e91e8c;margin-left:10px'>{w['pinyin']}</span>
-                                </div>
-                                <button onclick="speakChinese('{w['hanzi']}')"
-                                    style='margin-left:auto;background:none;border:none;font-size:22px;cursor:pointer;padding:4px 8px;border-radius:8px;'
-                                    title="Nghe phát âm">🔊</button>
+                            <div style='background:#fce4ec;border-radius:10px;padding:10px 14px;margin:4px 0'>
+                                <span style='font-size:28px;color:#c2185b;font-weight:bold'>{w['hanzi']}</span>
+                                <span style='color:#e91e8c;margin-left:10px'>{w['pinyin']}</span>
                             </div>
                             """, unsafe_allow_html=True)
+                        with col_spk:
+                            tts_button(w['hanzi'])
                         with col_input:
                             st.text_input(
                                 f"Nghĩa #{i+1}",
@@ -468,19 +463,18 @@ if page in HSK_PAGES:
                     icon = "✅" if r["is_correct"] else "❌"
                     bg = "#e8f5e9" if r["is_correct"] else "#fce4ec"
                     border = "#66bb6a" if r["is_correct"] else "#e91e8c"
-                    st.markdown(f"""
-                    <div style='background:{bg};border-left:4px solid {border};border-radius:0 10px 10px 0;padding:10px 16px;margin:6px 0;display:flex;align-items:flex-start'>
-                        <div style='flex:1'>
+                    rc1, rc2 = st.columns([6, 1])
+                    with rc1:
+                        st.markdown(f"""
+                        <div style='background:{bg};border-left:4px solid {border};border-radius:0 10px 10px 0;padding:10px 16px;margin:6px 0'>
                             {icon} <strong style='font-size:20px;color:#c2185b'>{r['hanzi']}</strong>
                             <span style='color:#e91e8c;margin-left:8px'>{r['pinyin']}</span><br>
                             <span style='color:#555'>Bạn trả lời: <em>{r['user'] or '(để trống)'}</em></span><br>
                             <span style='color:#2e7d32'><strong>Đáp án: {r['correct']}</strong></span>
                         </div>
-                        <button onclick="speakChinese('{r['hanzi']}')"
-                            style='background:none;border:none;font-size:20px;cursor:pointer;padding:4px 8px;'
-                            title="Nghe phát âm">🔊</button>
-                    </div>
-                    """, unsafe_allow_html=True)
+                        """, unsafe_allow_html=True)
+                    with rc2:
+                        tts_button(r['hanzi'])
 
                 if st.button("🔄 Làm lại với 10 từ mới", use_container_width=True, key=f"redo_vocab_{level}"):
                     due = get_due_words(level)
@@ -623,11 +617,7 @@ elif page == "📋 Danh sách từ":
         for w in words:
             badge = f"`{w.get('hsk_level', '?')}`"
             with st.expander(f"{badge} **{w['hanzi']}** ({w['pinyin']}) — {w['meaning']}"):
-                st.markdown(f"""
-                    <button onclick="speakChinese('{w['hanzi']}')"
-                        style='background:#f48fb1;border:none;color:white;font-size:16px;cursor:pointer;padding:6px 14px;border-radius:8px;margin-bottom:8px;'>
-                        🔊 Nghe phát âm
-                    </button>""", unsafe_allow_html=True)
+                tts_button(w['hanzi'])
                 if w["example_zh"]:
                     st.write(f"Ví dụ: *{w['example_zh']}*")
                 if w["example_vn"]:
