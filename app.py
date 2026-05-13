@@ -1,6 +1,8 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from google import genai
 import os
+import urllib.parse
 
 os.environ["DATABASE_URL"] = st.secrets["DATABASE_URL"]
 _gemini_key = st.secrets["GEMINI_API_KEY"]
@@ -236,16 +238,37 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def tts_button(hanzi: str):
-    """Nút loa phát âm, chạy trực tiếp trong trang (không dùng iframe)."""
+    """Phát âm qua Google TTS audio (ưu tiên) → Web Speech API (dự phòng).
+    Dùng components.html() để tránh CSP của trang chủ và giới hạn Safari."""
     safe = hanzi.replace("\\", "\\\\").replace("'", "\\'")
-    st.markdown(
-        f'<button onclick="(function(){{window.speechSynthesis.cancel();'
-        f'var u=new SpeechSynthesisUtterance(\'{safe}\');'
-        f'u.lang=\'zh-CN\';u.rate=0.85;window.speechSynthesis.speak(u);}})();" '
-        f'style="background:none;border:none;font-size:22px;cursor:pointer;'
-        f'padding:4px 8px;border-radius:8px;" title="Phát âm">🔊</button>',
-        unsafe_allow_html=True
-    )
+    encoded = urllib.parse.quote(hanzi)
+    tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={encoded}&tl=zh-CN&client=tw-ob"
+    components.html(f"""
+    <html><body style="margin:0;padding:0;background:transparent;">
+    <button id="b"
+        style="background:none;border:none;font-size:22px;cursor:pointer;
+               padding:4px 8px;border-radius:8px;line-height:1;"
+        title="Phát âm">🔊</button>
+    <script>
+    document.getElementById('b').onclick = function() {{
+        var text = '{safe}';
+        // Primary: Google Translate TTS audio — works in Safari iframes, no permission needed
+        var audio = new Audio('{tts_url}');
+        audio.play().catch(function() {{
+            // Fallback: Web Speech API
+            try {{
+                var ss = (window.parent && window.parent.speechSynthesis) || window.speechSynthesis;
+                var SU = (window.parent && window.parent.SpeechSynthesisUtterance) || SpeechSynthesisUtterance;
+                ss.cancel();
+                var u = new SU(text);
+                u.lang = 'zh-CN'; u.rate = 0.9;
+                ss.speak(u);
+            }} catch(e) {{}}
+        }});
+    }};
+    </script>
+    </body></html>
+    """, height=44)
 
 # --- Sidebar ---
 with st.sidebar:
