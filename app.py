@@ -252,17 +252,24 @@ def tts_button(hanzi: str):
     <script>
     document.getElementById('b').onclick = function() {{
         var text = '{safe}';
-        // Primary: Google Translate TTS audio — works in Safari iframes, no permission needed
+
+        // Cả hai được gọi ĐỒNG BỘ ngay trong sự kiện bấm
+        // (iOS Safari sẽ hủy quyền audio nếu gọi bất đồng bộ sau .catch)
+
+        // Primary: Google Translate TTS (mp3 trực tiếp, không cần quyền, hoạt động trên iOS Safari)
+        // audio.play() gọi đồng bộ trong handler tap — iOS Safari cho phép
         var audio = new Audio('{tts_url}');
         audio.play().catch(function() {{
-            // Fallback: Web Speech API
+            // Fallback: Web Speech API (chạy async khi audio fail)
             try {{
                 var ss = (window.parent && window.parent.speechSynthesis) || window.speechSynthesis;
                 var SU = (window.parent && window.parent.SpeechSynthesisUtterance) || SpeechSynthesisUtterance;
-                ss.cancel();
-                var u = new SU(text);
-                u.lang = 'zh-CN'; u.rate = 0.9;
-                ss.speak(u);
+                if (ss && SU) {{
+                    ss.cancel();
+                    var u = new SU(text);
+                    u.lang = 'zh-CN'; u.rate = 0.9;
+                    ss.speak(u);
+                }}
             }} catch(e) {{}}
         }});
     }};
