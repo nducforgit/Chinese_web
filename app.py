@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 from google import genai
 import os
 import urllib.parse
@@ -238,44 +237,24 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def tts_button(hanzi: str):
-    """Phát âm qua Google TTS audio (ưu tiên) → Web Speech API (dự phòng).
-    Dùng components.html() để tránh CSP của trang chủ và giới hạn Safari."""
-    safe = hanzi.replace("\\", "\\\\").replace("'", "\\'")
+    """Phát âm qua Youdao dictionary audio.
+    Dùng st.markdown onclick trong trang chính — tránh giới hạn iframe của iOS Safari."""
     encoded = urllib.parse.quote(hanzi)
-    tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={encoded}&tl=zh-CN&client=tw-ob"
-    components.html(f"""
-    <html><body style="margin:0;padding:0;background:transparent;">
-    <button id="b"
-        style="background:none;border:none;font-size:22px;cursor:pointer;
-               padding:4px 8px;border-radius:8px;line-height:1;"
-        title="Phát âm">🔊</button>
-    <script>
-    document.getElementById('b').onclick = function() {{
-        var text = '{safe}';
-
-        // Cả hai được gọi ĐỒNG BỘ ngay trong sự kiện bấm
-        // (iOS Safari sẽ hủy quyền audio nếu gọi bất đồng bộ sau .catch)
-
-        // Primary: Google Translate TTS (mp3 trực tiếp, không cần quyền, hoạt động trên iOS Safari)
-        // audio.play() gọi đồng bộ trong handler tap — iOS Safari cho phép
-        var audio = new Audio('{tts_url}');
-        audio.play().catch(function() {{
-            // Fallback: Web Speech API (chạy async khi audio fail)
-            try {{
-                var ss = (window.parent && window.parent.speechSynthesis) || window.speechSynthesis;
-                var SU = (window.parent && window.parent.SpeechSynthesisUtterance) || SpeechSynthesisUtterance;
-                if (ss && SU) {{
-                    ss.cancel();
-                    var u = new SU(text);
-                    u.lang = 'zh-CN'; u.rate = 0.9;
-                    ss.speak(u);
-                }}
-            }} catch(e) {{}}
-        }});
-    }};
-    </script>
-    </body></html>
-    """, height=44)
+    # Youdao dictionary TTS: audio MP3 chất lượng tốt, không cần xác thực
+    url = f"https://dict.youdao.com/dictvoice?audio={encoded}&type=1"
+    # Fallback: Google Translate TTS
+    url2 = f"https://translate.google.com/translate_tts?ie=UTF-8&q={encoded}&tl=zh-CN&client=tw-ob"
+    st.markdown(
+        f'<button onclick="(function(){{'
+        f'var a=new Audio(\'{url}\');'
+        f'a.onerror=function(){{new Audio(\'{url2}\').play();}};'
+        f'a.play().catch(function(){{new Audio(\'{url2}\').play();}});'
+        f'}})();" '
+        f'style="background:none;border:none;font-size:22px;cursor:pointer;'
+        f'padding:4px 8px;border-radius:8px;vertical-align:middle;" '
+        f'title="Phát âm">🔊</button>',
+        unsafe_allow_html=True
+    )
 
 # --- Sidebar ---
 with st.sidebar:
