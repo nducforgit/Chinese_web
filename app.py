@@ -782,7 +782,7 @@ elif page == "📝 Bài tập luyện tập":
         tab_fill, tab_mc, tab_match = st.tabs([
             "✏️ Điền từ vào chỗ trống",
             "🔤 Chọn đáp án đúng",
-            "🔗 Ghép từ với nghĩa",
+            "🔗 Sắp xếp thành câu",
         ])
 
         def _show_score(n_ok, total):
@@ -984,58 +984,86 @@ elif page == "📝 Bài tập luyện tập":
                     st.rerun()
 
         # ──────────────────────────────────────────────────────
-        # TAB 3: GHÉP TỪ VỚI NGHĨA
+        # TAB 3: SẮP XẾP THÀNH CÂU
         # ──────────────────────────────────────────────────────
         with tab_match:
-            st.markdown("### 🔗 Ghép từ với nghĩa")
-            st.caption("Chọn nghĩa tiếng Việt đúng cho từng chữ Hán trong danh sách.")
+            import re as _re
+            import jieba as _jieba
 
-            WG = f"gw_{ex_level}"; SG = f"gs_{ex_level}"; RG = f"gr_{ex_level}"; MG = f"gml_{ex_level}"
+            st.markdown("### 🔗 Sắp xếp thành câu")
+            st.caption("Các từ trong câu bị xáo trộn. Nhập lại đúng thứ tự để tạo câu có nghĩa.")
+
+            WG = f"gw_{ex_level}"; SG = f"gs_{ex_level}"; RG = f"gr_{ex_level}"
+            TK = f"gt_{ex_level}"
+
+            words_with_ex2 = [w for w in all_ex if w.get('example_zh') and len(w['example_zh']) >= 4]
+
+            def _segment(sentence):
+                clean = _re.sub(r'[。，、？！：；""''（）【】\s]', '', sentence)
+                tokens = [t for t in _jieba.cut(clean, cut_all=False) if t.strip()]
+                return tokens
 
             if WG not in st.session_state or st.button("🔄 Bài mới", key=f"gn_{ex_level}"):
-                batch3 = _rnd.sample(all_ex, min(8, len(all_ex)))
+                batch3 = _rnd.sample(words_with_ex2, min(8, len(words_with_ex2)))
                 st.session_state[WG] = batch3
                 st.session_state[SG] = False
                 st.session_state[RG] = {}
-                meanings = [w['meaning'] for w in batch3]
-                _rnd.shuffle(meanings)
-                st.session_state[MG] = meanings
+                tokens_map = {}
+                for w in batch3:
+                    tokens = _segment(w['example_zh'])
+                    shuffled = tokens[:]
+                    # Đảm bảo thứ tự bị xáo trộn khác ban đầu
+                    attempts = 0
+                    while shuffled == tokens and len(tokens) > 1 and attempts < 20:
+                        _rnd.shuffle(shuffled)
+                        attempts += 1
+                    tokens_map[w['id']] = {"tokens": tokens, "shuffled": shuffled}
+                st.session_state[TK] = tokens_map
                 st.rerun()
 
             gw = st.session_state[WG]
-            gm = st.session_state.get(MG, [])
+            tokens_map = st.session_state.get(TK, {})
 
             if not st.session_state.get(SG, False):
                 with st.form(f"match_{ex_level}"):
-                    st.markdown("**Chọn nghĩa đúng cho từng từ:**")
-                    choices = ["— Chọn nghĩa —"] + gm
                     for i, w in enumerate(gw):
-                        c_w, c_s, c_sel = st.columns([2, 1, 4])
-                        with c_w:
+                        info = tokens_map.get(w['id'], {})
+                        shuffled = info.get("shuffled", [w['hanzi']])
+                        display = " / ".join(shuffled)
+                        col_q, col_spk = st.columns([10, 1])
+                        with col_q:
                             st.markdown(f"""
-                            <div style='background:#fce4ec;border-radius:10px;
-                                        padding:8px 12px;margin:4px 0;text-align:center'>
-                                <span style='font-size:24px;color:#c2185b;font-weight:bold'>{w['hanzi']}</span><br>
-                                <span style='color:#e91e8c;font-size:12px'>{w['pinyin']}</span>
+                            <div style='background:#fce4ec;border-radius:10px;padding:12px 16px;margin:6px 0'>
+                                <span style='color:#555;font-size:13px'>{i+1}.</span>
+                                <span style='font-size:20px;color:#c2185b;font-weight:bold'> {display}</span><br>
+                                <span style='color:#888;font-size:13px'>{w.get("example_vn","")}</span>
                             </div>
                             """, unsafe_allow_html=True)
-                        with c_s:
+                        with col_spk:
                             st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
-                            tts_button(w['hanzi'])
-                        with c_sel:
-                            st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
-                            st.selectbox("_", options=choices,
-                                         key=f"gm_{ex_level}_{w['id']}",
-                                         label_visibility="collapsed")
+                            tts_button(w['example_zh'])
+                        st.text_input("_", key=f"gm_{ex_level}_{w['id']}",
+                                      placeholder="Nhập câu đúng (không cần dấu câu)...",
+                                      label_visibility="collapsed")
+                        st.markdown("<hr style='border:1px solid #f8bbd0;margin:4px 0'>",
+                                    unsafe_allow_html=True)
                     btn_g = st.form_submit_button("✅ Kiểm tra kết quả", use_container_width=True)
 
                 if btn_g:
                     res3 = {}
                     for w in gw:
-                        chosen = st.session_state.get(f"gm_{ex_level}_{w['id']}", "")
-                        res3[w['id']] = {"hanzi": w['hanzi'], "pinyin": w['pinyin'],
-                                         "correct": w['meaning'], "user": chosen,
-                                         "ok": chosen == w['meaning']}
+                        user_raw = st.session_state.get(f"gm_{ex_level}_{w['id']}", "").strip()
+                        def _clean(s):
+                            return _re.sub(r'[。，、？！：；""''（）【】\s]', '', s)
+                        correct_clean = _clean(w['example_zh'])
+                        user_clean = _clean(user_raw)
+                        res3[w['id']] = {
+                            "hanzi": w['hanzi'],
+                            "correct": w['example_zh'],
+                            "vn": w.get('example_vn', ''),
+                            "user": user_raw,
+                            "ok": user_clean == correct_clean,
+                        }
                     st.session_state[RG] = res3
                     st.session_state[SG] = True
                     st.rerun()
@@ -1047,8 +1075,20 @@ elif page == "📝 Bài tập luyện tập":
                     icon = "✅" if r['ok'] else "❌"
                     bg = "#e8f5e9" if r['ok'] else "#fce4ec"
                     border = "#66bb6a" if r['ok'] else "#e91e8c"
-                    _result_card(icon, bg, border, r['hanzi'], r['pinyin'],
-                                 "Bạn chọn", r['user'], "Đáp án", r['correct'])
+                    col_card, col_spk = st.columns([11, 1])
+                    with col_card:
+                        st.markdown(f"""
+                        <div style='background:{bg};border-left:4px solid {border};
+                                    border-radius:0 10px 10px 0;padding:10px 16px;margin:6px 0'>
+                            {icon} <span style='color:#555'>Bạn nhập:
+                            <strong style='color:#c2185b'>{r['user'] or "(để trống)"}</strong></span><br>
+                            <span style='color:#2e7d32'>Câu đúng:
+                            <strong style='font-size:18px'>{r['correct']}</strong></span>
+                            {"<br><span style='color:#888;font-size:13px'>" + r['vn'] + "</span>" if r['vn'] else ""}
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_spk:
+                        tts_button(r['hanzi'])
                 if st.button("🔄 Làm lại", key=f"match_redo_{ex_level}", use_container_width=True):
                     del st.session_state[WG]
                     st.rerun()
