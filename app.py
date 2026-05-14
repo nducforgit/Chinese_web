@@ -287,6 +287,7 @@ with st.sidebar:
          "📘 HSK 2 — Sơ cấp",
          "📗 HSK 3 — Trung sơ cấp",
          "📕 HSK 4 — Trung cấp",
+         "📝 Bài tập luyện tập",
          "📋 Danh sách từ",
          "🈯 Dịch câu",
          "✍️ Đặt câu & Kiểm tra ngữ pháp"],
@@ -761,3 +762,254 @@ Trình bày rõ ràng, dễ học."""
                         st.markdown(f'<div class="ai-result">{_ai_html(ask_gemini(prompt))}</div>', unsafe_allow_html=True)
                     except Exception as e:
                         st.error(f"Lỗi: {e}")
+
+
+# ============================================================
+# BÀI TẬP LUYỆN TẬP
+# ============================================================
+elif page == "📝 Bài tập luyện tập":
+    import random as _rnd
+
+    st.markdown("# 📝 Bài tập luyện tập")
+    st.markdown("---")
+
+    ex_level = st.radio("Cấp độ:", ["HSK2", "HSK3", "HSK4"], horizontal=True, key="ex_lvl")
+    all_ex = get_all_words(ex_level)
+
+    if len(all_ex) < 4:
+        st.info(f"Cần ít nhất 4 từ ở cấp {ex_level}.")
+    else:
+        tab_fill, tab_mc, tab_match = st.tabs([
+            "✏️ Điền từ vào chỗ trống",
+            "🔤 Chọn đáp án đúng",
+            "🔗 Ghép từ với nghĩa",
+        ])
+
+        def _show_score(n_ok, total):
+            pct = n_ok / total
+            if pct == 1:
+                st.balloons()
+                st.success(f"🎊 Xuất sắc! Mai Hương đúng **{n_ok}/{total}**!")
+            elif pct >= 0.7:
+                st.success(f"👏 Tốt lắm! **{n_ok}/{total}** câu đúng!")
+            else:
+                st.warning(f"💪 Cố lên! **{n_ok}/{total}** câu đúng. Luyện thêm nhé!")
+            st.progress(pct)
+            st.markdown("---")
+
+        def _result_card(icon, bg, border, hanzi, pinyin, label_u, user_val, label_c, correct_val):
+            col_card, col_spk = st.columns([11, 1])
+            with col_card:
+                st.markdown(f"""
+                <div style='background:{bg};border-left:4px solid {border};
+                            border-radius:0 10px 10px 0;padding:10px 16px;margin:6px 0'>
+                    {icon} <strong style='font-size:20px;color:#c2185b'>{hanzi}</strong>
+                    <span style='color:#e91e8c;margin-left:8px'>{pinyin}</span><br>
+                    <span style='color:#555'>{label_u}: <em>{user_val or "(để trống)"}</em></span><br>
+                    <span style='color:#2e7d32'><strong>{label_c}: {correct_val}</strong></span>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_spk:
+                tts_button(hanzi)
+
+        # ──────────────────────────────────────────────────────
+        # TAB 1: ĐIỀN TỪ VÀO CHỖ TRỐNG
+        # ──────────────────────────────────────────────────────
+        with tab_fill:
+            st.markdown("### ✏️ Điền từ vào chỗ trống")
+            st.caption("Đọc nghĩa tiếng Việt và pinyin gợi ý → điền chữ Hán đúng.")
+
+            WF = f"fw_{ex_level}"; SF = f"fs_{ex_level}"; RF = f"fr_{ex_level}"
+
+            if WF not in st.session_state or st.button("🔄 Bài mới", key=f"fn_{ex_level}"):
+                st.session_state[WF] = _rnd.sample(all_ex, min(10, len(all_ex)))
+                st.session_state[SF] = False
+                st.session_state[RF] = {}
+                st.rerun()
+
+            fw = st.session_state[WF]
+
+            if not st.session_state.get(SF, False):
+                with st.form(f"fill_{ex_level}"):
+                    for i, w in enumerate(fw):
+                        c1, c2 = st.columns([3, 2])
+                        with c1:
+                            st.markdown(f"""
+                            <div style='background:#fce4ec;border-radius:10px;padding:10px 14px;margin:4px 0'>
+                                <span style='color:#880e4f'><strong>{i+1}. {w['meaning']}</strong></span><br>
+                                <span style='color:#e91e8c;font-size:13px'>🔤 {w['pinyin']}</span>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        with c2:
+                            st.text_input("_", key=f"fa_{ex_level}_{w['id']}",
+                                          placeholder="Nhập chữ Hán...",
+                                          label_visibility="collapsed")
+                    btn_f = st.form_submit_button("✅ Kiểm tra kết quả", use_container_width=True)
+
+                if btn_f:
+                    res = {}
+                    for w in fw:
+                        ans = st.session_state.get(f"fa_{ex_level}_{w['id']}", "").strip()
+                        res[w['id']] = {"hanzi": w['hanzi'], "pinyin": w['pinyin'],
+                                        "meaning": w['meaning'], "user": ans,
+                                        "ok": ans == w['hanzi']}
+                    st.session_state[RF] = res
+                    st.session_state[SF] = True
+                    st.rerun()
+
+            else:
+                res = st.session_state[RF]
+                _show_score(sum(r['ok'] for r in res.values()), len(res))
+                for r in res.values():
+                    icon = "✅" if r['ok'] else "❌"
+                    bg = "#e8f5e9" if r['ok'] else "#fce4ec"
+                    border = "#66bb6a" if r['ok'] else "#e91e8c"
+                    _result_card(icon, bg, border, r['hanzi'], r['pinyin'],
+                                 "Bạn điền", r['user'], "Đáp án", r['hanzi'])
+                if st.button("🔄 Làm lại", key=f"fr_redo_{ex_level}", use_container_width=True):
+                    st.session_state[WF] = _rnd.sample(all_ex, min(10, len(all_ex)))
+                    st.session_state[SF] = False
+                    st.session_state[RF] = {}
+                    st.rerun()
+
+        # ──────────────────────────────────────────────────────
+        # TAB 2: CHỌN ĐÁP ÁN ĐÚNG
+        # ──────────────────────────────────────────────────────
+        with tab_mc:
+            st.markdown("### 🔤 Chọn đáp án đúng")
+            st.caption("Nhìn chữ Hán và pinyin → chọn nghĩa tiếng Việt đúng trong 4 đáp án.")
+
+            WM = f"mw_{ex_level}"; SM = f"ms_{ex_level}"; RM = f"mr_{ex_level}"; OM = f"mo_{ex_level}"
+
+            if WM not in st.session_state or st.button("🔄 Bài mới", key=f"mn_{ex_level}"):
+                batch = _rnd.sample(all_ex, min(10, len(all_ex)))
+                st.session_state[WM] = batch
+                st.session_state[SM] = False
+                st.session_state[RM] = {}
+                opts_map = {}
+                for w in batch:
+                    wrong_pool = [x for x in all_ex if x['id'] != w['id']]
+                    wrongs = _rnd.sample(wrong_pool, min(3, len(wrong_pool)))
+                    opts = [w['meaning']] + [x['meaning'] for x in wrongs]
+                    _rnd.shuffle(opts)
+                    opts_map[w['id']] = opts
+                st.session_state[OM] = opts_map
+                st.rerun()
+
+            mw = st.session_state[WM]
+            opts_map = st.session_state.get(OM, {})
+
+            if not st.session_state.get(SM, False):
+                with st.form(f"mc_{ex_level}"):
+                    for i, w in enumerate(mw):
+                        col_h, col_spk = st.columns([8, 1])
+                        with col_h:
+                            st.markdown(f"""
+                            <div style='background:#fce4ec;border-radius:10px;padding:10px 16px;margin:8px 0'>
+                                <span style='font-size:30px;color:#c2185b;font-weight:bold'>{w['hanzi']}</span>
+                                <span style='color:#e91e8c;margin-left:10px;font-size:16px'>{w['pinyin']}</span>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        with col_spk:
+                            st.markdown("<div style='margin-top:14px'></div>", unsafe_allow_html=True)
+                            tts_button(w['hanzi'])
+                        opts = opts_map.get(w['id'], [w['meaning']])
+                        st.radio("_", options=opts, key=f"mc_{ex_level}_{w['id']}",
+                                 label_visibility="collapsed")
+                        st.markdown("<hr style='border:1px solid #f8bbd0;margin:4px 0'>",
+                                    unsafe_allow_html=True)
+                    btn_m = st.form_submit_button("✅ Kiểm tra kết quả", use_container_width=True)
+
+                if btn_m:
+                    res2 = {}
+                    for w in mw:
+                        chosen = st.session_state.get(f"mc_{ex_level}_{w['id']}", "")
+                        res2[w['id']] = {"hanzi": w['hanzi'], "pinyin": w['pinyin'],
+                                         "correct": w['meaning'], "user": chosen,
+                                         "ok": chosen == w['meaning']}
+                    st.session_state[RM] = res2
+                    st.session_state[SM] = True
+                    st.rerun()
+
+            else:
+                res2 = st.session_state[RM]
+                _show_score(sum(r['ok'] for r in res2.values()), len(res2))
+                for r in res2.values():
+                    icon = "✅" if r['ok'] else "❌"
+                    bg = "#e8f5e9" if r['ok'] else "#fce4ec"
+                    border = "#66bb6a" if r['ok'] else "#e91e8c"
+                    _result_card(icon, bg, border, r['hanzi'], r['pinyin'],
+                                 "Bạn chọn", r['user'], "Đáp án", r['correct'])
+                if st.button("🔄 Làm lại", key=f"mc_redo_{ex_level}", use_container_width=True):
+                    del st.session_state[WM]
+                    st.rerun()
+
+        # ──────────────────────────────────────────────────────
+        # TAB 3: GHÉP TỪ VỚI NGHĨA
+        # ──────────────────────────────────────────────────────
+        with tab_match:
+            st.markdown("### 🔗 Ghép từ với nghĩa")
+            st.caption("Chọn nghĩa tiếng Việt đúng cho từng chữ Hán trong danh sách.")
+
+            WG = f"gw_{ex_level}"; SG = f"gs_{ex_level}"; RG = f"gr_{ex_level}"; MG = f"gml_{ex_level}"
+
+            if WG not in st.session_state or st.button("🔄 Bài mới", key=f"gn_{ex_level}"):
+                batch3 = _rnd.sample(all_ex, min(8, len(all_ex)))
+                st.session_state[WG] = batch3
+                st.session_state[SG] = False
+                st.session_state[RG] = {}
+                meanings = [w['meaning'] for w in batch3]
+                _rnd.shuffle(meanings)
+                st.session_state[MG] = meanings
+                st.rerun()
+
+            gw = st.session_state[WG]
+            gm = st.session_state.get(MG, [])
+
+            if not st.session_state.get(SG, False):
+                with st.form(f"match_{ex_level}"):
+                    st.markdown("**Chọn nghĩa đúng cho từng từ:**")
+                    choices = ["— Chọn nghĩa —"] + gm
+                    for i, w in enumerate(gw):
+                        c_w, c_s, c_sel = st.columns([2, 1, 4])
+                        with c_w:
+                            st.markdown(f"""
+                            <div style='background:#fce4ec;border-radius:10px;
+                                        padding:8px 12px;margin:4px 0;text-align:center'>
+                                <span style='font-size:24px;color:#c2185b;font-weight:bold'>{w['hanzi']}</span><br>
+                                <span style='color:#e91e8c;font-size:12px'>{w['pinyin']}</span>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        with c_s:
+                            st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
+                            tts_button(w['hanzi'])
+                        with c_sel:
+                            st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
+                            st.selectbox("_", options=choices,
+                                         key=f"gm_{ex_level}_{w['id']}",
+                                         label_visibility="collapsed")
+                    btn_g = st.form_submit_button("✅ Kiểm tra kết quả", use_container_width=True)
+
+                if btn_g:
+                    res3 = {}
+                    for w in gw:
+                        chosen = st.session_state.get(f"gm_{ex_level}_{w['id']}", "")
+                        res3[w['id']] = {"hanzi": w['hanzi'], "pinyin": w['pinyin'],
+                                         "correct": w['meaning'], "user": chosen,
+                                         "ok": chosen == w['meaning']}
+                    st.session_state[RG] = res3
+                    st.session_state[SG] = True
+                    st.rerun()
+
+            else:
+                res3 = st.session_state[RG]
+                _show_score(sum(r['ok'] for r in res3.values()), len(res3))
+                for r in res3.values():
+                    icon = "✅" if r['ok'] else "❌"
+                    bg = "#e8f5e9" if r['ok'] else "#fce4ec"
+                    border = "#66bb6a" if r['ok'] else "#e91e8c"
+                    _result_card(icon, bg, border, r['hanzi'], r['pinyin'],
+                                 "Bạn chọn", r['user'], "Đáp án", r['correct'])
+                if st.button("🔄 Làm lại", key=f"match_redo_{ex_level}", use_container_width=True):
+                    del st.session_state[WG]
+                    st.rerun()
