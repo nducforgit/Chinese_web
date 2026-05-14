@@ -817,60 +817,99 @@ elif page == "📝 Bài tập luyện tập":
         # ──────────────────────────────────────────────────────
         with tab_fill:
             st.markdown("### ✏️ Điền từ vào chỗ trống")
-            st.caption("Đọc nghĩa tiếng Việt và pinyin gợi ý → điền chữ Hán đúng.")
+            st.caption("Đọc câu → chọn từ đúng điền vào chỗ ___ trong 4 đáp án.")
 
-            WF = f"fw_{ex_level}"; SF = f"fs_{ex_level}"; RF = f"fr_{ex_level}"
+            WF = f"fw_{ex_level}"; SF = f"fs_{ex_level}"; RF = f"fr_{ex_level}"; OF = f"fo_{ex_level}"
 
-            if WF not in st.session_state or st.button("🔄 Bài mới", key=f"fn_{ex_level}"):
-                st.session_state[WF] = _rnd.sample(all_ex, min(10, len(all_ex)))
-                st.session_state[SF] = False
-                st.session_state[RF] = {}
-                st.rerun()
+            # Chỉ lấy từ có câu ví dụ chứa chính từ đó
+            words_with_ex = [w for w in all_ex
+                             if w.get('example_zh') and w['hanzi'] in w['example_zh']]
 
-            fw = st.session_state[WF]
-
-            if not st.session_state.get(SF, False):
-                with st.form(f"fill_{ex_level}"):
-                    for i, w in enumerate(fw):
-                        c1, c2 = st.columns([3, 2])
-                        with c1:
-                            st.markdown(f"""
-                            <div style='background:#fce4ec;border-radius:10px;padding:10px 14px;margin:4px 0'>
-                                <span style='color:#880e4f'><strong>{i+1}. {w['meaning']}</strong></span><br>
-                                <span style='color:#e91e8c;font-size:13px'>🔤 {w['pinyin']}</span>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        with c2:
-                            st.text_input("_", key=f"fa_{ex_level}_{w['id']}",
-                                          placeholder="Nhập chữ Hán...",
-                                          label_visibility="collapsed")
-                    btn_f = st.form_submit_button("✅ Kiểm tra kết quả", use_container_width=True)
-
-                if btn_f:
-                    res = {}
-                    for w in fw:
-                        ans = st.session_state.get(f"fa_{ex_level}_{w['id']}", "").strip()
-                        res[w['id']] = {"hanzi": w['hanzi'], "pinyin": w['pinyin'],
-                                        "meaning": w['meaning'], "user": ans,
-                                        "ok": ans == w['hanzi']}
-                    st.session_state[RF] = res
-                    st.session_state[SF] = True
-                    st.rerun()
-
+            if len(words_with_ex) < 4:
+                st.info("Cấp này chưa có đủ câu ví dụ. Hãy thử cấp khác.")
             else:
-                res = st.session_state[RF]
-                _show_score(sum(r['ok'] for r in res.values()), len(res))
-                for r in res.values():
-                    icon = "✅" if r['ok'] else "❌"
-                    bg = "#e8f5e9" if r['ok'] else "#fce4ec"
-                    border = "#66bb6a" if r['ok'] else "#e91e8c"
-                    _result_card(icon, bg, border, r['hanzi'], r['pinyin'],
-                                 "Bạn điền", r['user'], "Đáp án", r['hanzi'])
-                if st.button("🔄 Làm lại", key=f"fr_redo_{ex_level}", use_container_width=True):
-                    st.session_state[WF] = _rnd.sample(all_ex, min(10, len(all_ex)))
+                if WF not in st.session_state or st.button("🔄 Bài mới", key=f"fn_{ex_level}"):
+                    batch = _rnd.sample(words_with_ex, min(10, len(words_with_ex)))
+                    st.session_state[WF] = batch
                     st.session_state[SF] = False
                     st.session_state[RF] = {}
+                    opts = {}
+                    for w in batch:
+                        wrong_pool = [x for x in all_ex if x['id'] != w['id']]
+                        wrongs = _rnd.sample(wrong_pool, min(3, len(wrong_pool)))
+                        choices = [w['hanzi']] + [x['hanzi'] for x in wrongs]
+                        _rnd.shuffle(choices)
+                        opts[w['id']] = choices
+                    st.session_state[OF] = opts
                     st.rerun()
+
+                fw = st.session_state[WF]
+                opts_f = st.session_state.get(OF, {})
+
+                if not st.session_state.get(SF, False):
+                    with st.form(f"fill_{ex_level}"):
+                        for i, w in enumerate(fw):
+                            blank_sentence = w['example_zh'].replace(w['hanzi'], '___', 1)
+                            col_s, col_spk = st.columns([10, 1])
+                            with col_s:
+                                st.markdown(f"""
+                                <div style='background:#fce4ec;border-radius:10px;padding:12px 16px;margin:6px 0'>
+                                    <span style='color:#555;font-size:13px'>{i+1}.</span>
+                                    <span style='font-size:20px;color:#880e4f;font-weight:bold'> {blank_sentence}</span><br>
+                                    <span style='color:#888;font-size:13px'>{w.get("example_vn","")}</span>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            with col_spk:
+                                st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
+                                tts_button(w['example_zh'])
+                            choices = opts_f.get(w['id'], [w['hanzi']])
+                            st.radio("_", options=choices, key=f"fa_{ex_level}_{w['id']}",
+                                     horizontal=True, label_visibility="collapsed")
+                            st.markdown("<hr style='border:1px solid #f8bbd0;margin:4px 0'>",
+                                        unsafe_allow_html=True)
+                        btn_f = st.form_submit_button("✅ Kiểm tra kết quả", use_container_width=True)
+
+                    if btn_f:
+                        res = {}
+                        for w in fw:
+                            chosen = st.session_state.get(f"fa_{ex_level}_{w['id']}", "")
+                            blank = w['example_zh'].replace(w['hanzi'], '___', 1)
+                            res[w['id']] = {
+                                "hanzi": w['hanzi'], "pinyin": w['pinyin'],
+                                "blank": blank, "full": w['example_zh'],
+                                "vn": w.get('example_vn', ''),
+                                "user": chosen, "ok": chosen == w['hanzi']
+                            }
+                        st.session_state[RF] = res
+                        st.session_state[SF] = True
+                        st.rerun()
+
+                else:
+                    res = st.session_state[RF]
+                    _show_score(sum(r['ok'] for r in res.values()), len(res))
+                    for r in res.values():
+                        icon = "✅" if r['ok'] else "❌"
+                        bg = "#e8f5e9" if r['ok'] else "#fce4ec"
+                        border = "#66bb6a" if r['ok'] else "#e91e8c"
+                        col_card, col_spk = st.columns([11, 1])
+                        with col_card:
+                            st.markdown(f"""
+                            <div style='background:{bg};border-left:4px solid {border};
+                                        border-radius:0 10px 10px 0;padding:10px 16px;margin:6px 0'>
+                                {icon} <span style='font-size:18px;color:#880e4f'>{r['blank']}</span><br>
+                                <span style='color:#555'>Bạn chọn: <strong style='font-size:18px;color:#c2185b'>{r['user']}</strong>
+                                {"" if r['ok'] else " ❌"}</span><br>
+                                <span style='color:#2e7d32'>Câu đúng: <strong style='font-size:18px'>{r['full']}</strong></span>
+                                {"<br><span style='color:#888;font-size:13px'>" + r['vn'] + "</span>" if r['vn'] else ""}
+                            </div>
+                            """, unsafe_allow_html=True)
+                        with col_spk:
+                            tts_button(r['hanzi'])
+                    if st.button("🔄 Làm lại", key=f"fr_redo_{ex_level}", use_container_width=True):
+                        st.session_state[WF] = _rnd.sample(words_with_ex, min(10, len(words_with_ex)))
+                        st.session_state[SF] = False
+                        st.session_state[RF] = {}
+                        st.rerun()
 
         # ──────────────────────────────────────────────────────
         # TAB 2: CHỌN ĐÁP ÁN ĐÚNG
