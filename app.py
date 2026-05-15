@@ -1,8 +1,6 @@
 import streamlit as st
 from google import genai
 import os
-import io
-import base64
 
 os.environ["DATABASE_URL"] = st.secrets["DATABASE_URL"]
 _gemini_key = st.secrets["GEMINI_API_KEY"]
@@ -237,24 +235,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-@st.cache_data(show_spinner=False)
-def _tts_b64(text: str) -> str:
-    """Server-side TTS via gTTS → base64 MP3. Cached per unique text."""
-    try:
-        from gtts import gTTS
-        buf = io.BytesIO()
-        gTTS(text=text, lang='zh-cn', slow=False).write_to_fp(buf)
-        return base64.b64encode(buf.getvalue()).decode()
-    except Exception:
-        return ""
-
-
-def tts_button(hanzi: str):
-    """Phát âm tiếng Trung qua st.audio (native Streamlit, không bị chặn bởi iframe policy)."""
-    b64 = _tts_b64(hanzi)
-    if b64:
-        st.audio(base64.b64decode(b64), format="audio/mp3")
-
 # --- Sidebar ---
 with st.sidebar:
     st.markdown("## 🌸 Xin chào, **Mai Hương**!")
@@ -407,7 +387,7 @@ if page in HSK_PAGES:
             if not submitted:
                 with st.form(f"vocab_form_{level}"):
                     for i, w in enumerate(words_today):
-                        col_word, col_spk, col_input = st.columns([2, 1, 3])
+                        col_word, col_input = st.columns([2, 3])
                         with col_word:
                             st.markdown(f"""
                             <div style='background:#fce4ec;border-radius:10px;padding:10px 14px;margin:4px 0'>
@@ -415,8 +395,6 @@ if page in HSK_PAGES:
                                 <span style='color:#e91e8c;margin-left:10px'>{w['pinyin']}</span>
                             </div>
                             """, unsafe_allow_html=True)
-                        with col_spk:
-                            tts_button(w['hanzi'])
                         with col_input:
                             st.text_input(
                                 f"Nghĩa #{i+1}",
@@ -472,18 +450,14 @@ if page in HSK_PAGES:
                     icon = "✅" if r["is_correct"] else "❌"
                     bg = "#e8f5e9" if r["is_correct"] else "#fce4ec"
                     border = "#66bb6a" if r["is_correct"] else "#e91e8c"
-                    rc1, rc2 = st.columns([6, 1])
-                    with rc1:
-                        st.markdown(f"""
-                        <div style='background:{bg};border-left:4px solid {border};border-radius:0 10px 10px 0;padding:10px 16px;margin:6px 0'>
-                            {icon} <strong style='font-size:20px;color:#c2185b'>{r['hanzi']}</strong>
-                            <span style='color:#e91e8c;margin-left:8px'>{r['pinyin']}</span><br>
-                            <span style='color:#555'>Bạn trả lời: <em>{r['user'] or '(để trống)'}</em></span><br>
-                            <span style='color:#2e7d32'><strong>Đáp án: {r['correct']}</strong></span>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    with rc2:
-                        tts_button(r['hanzi'])
+                    st.markdown(f"""
+                    <div style='background:{bg};border-left:4px solid {border};border-radius:0 10px 10px 0;padding:10px 16px;margin:6px 0'>
+                        {icon} <strong style='font-size:20px;color:#c2185b'>{r['hanzi']}</strong>
+                        <span style='color:#e91e8c;margin-left:8px'>{r['pinyin']}</span><br>
+                        <span style='color:#555'>Bạn trả lời: <em>{r['user'] or '(để trống)'}</em></span><br>
+                        <span style='color:#2e7d32'><strong>Đáp án: {r['correct']}</strong></span>
+                    </div>
+                    """, unsafe_allow_html=True)
 
                 if st.button("🔄 Làm lại với 10 từ mới", use_container_width=True, key=f"redo_vocab_{level}"):
                     due = get_due_words(level)
@@ -626,7 +600,6 @@ elif page == "📋 Danh sách từ":
         for w in words:
             badge = f"`{w.get('hsk_level', '?')}`"
             with st.expander(f"{badge} **{w['hanzi']}** ({w['pinyin']}) — {w['meaning']}"):
-                tts_button(w['hanzi'])
                 if w["example_zh"]:
                     st.write(f"Ví dụ: *{w['example_zh']}*")
                 if w["example_vn"]:
@@ -776,19 +749,15 @@ elif page == "📝 Bài tập luyện tập":
             st.markdown("---")
 
         def _result_card(icon, bg, border, hanzi, pinyin, label_u, user_val, label_c, correct_val):
-            col_card, col_spk = st.columns([11, 1])
-            with col_card:
-                st.markdown(f"""
-                <div style='background:{bg};border-left:4px solid {border};
-                            border-radius:0 10px 10px 0;padding:10px 16px;margin:6px 0'>
-                    {icon} <strong style='font-size:20px;color:#c2185b'>{hanzi}</strong>
-                    <span style='color:#e91e8c;margin-left:8px'>{pinyin}</span><br>
-                    <span style='color:#555'>{label_u}: <em>{user_val or "(để trống)"}</em></span><br>
-                    <span style='color:#2e7d32'><strong>{label_c}: {correct_val}</strong></span>
-                </div>
-                """, unsafe_allow_html=True)
-            with col_spk:
-                tts_button(hanzi)
+            st.markdown(f"""
+            <div style='background:{bg};border-left:4px solid {border};
+                        border-radius:0 10px 10px 0;padding:10px 16px;margin:6px 0'>
+                {icon} <strong style='font-size:20px;color:#c2185b'>{hanzi}</strong>
+                <span style='color:#e91e8c;margin-left:8px'>{pinyin}</span><br>
+                <span style='color:#555'>{label_u}: <em>{user_val or "(để trống)"}</em></span><br>
+                <span style='color:#2e7d32'><strong>{label_c}: {correct_val}</strong></span>
+            </div>
+            """, unsafe_allow_html=True)
 
         # ──────────────────────────────────────────────────────
         # TAB 1: ĐIỀN TỪ VÀO CHỖ TRỐNG
@@ -828,18 +797,13 @@ elif page == "📝 Bài tập luyện tập":
                     with st.form(f"fill_{ex_level}"):
                         for i, w in enumerate(fw):
                             blank_sentence = w['example_zh'].replace(w['hanzi'], '___', 1)
-                            col_s, col_spk = st.columns([10, 1])
-                            with col_s:
-                                st.markdown(f"""
-                                <div style='background:#fce4ec;border-radius:10px;padding:12px 16px;margin:6px 0'>
-                                    <span style='color:#555;font-size:13px'>{i+1}.</span>
-                                    <span style='font-size:20px;color:#880e4f;font-weight:bold'> {blank_sentence}</span><br>
-                                    <span style='color:#888;font-size:13px'>{w.get("example_vn","")}</span>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            with col_spk:
-                                st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
-                                tts_button(w['example_zh'])
+                            st.markdown(f"""
+                            <div style='background:#fce4ec;border-radius:10px;padding:12px 16px;margin:6px 0'>
+                                <span style='color:#555;font-size:13px'>{i+1}.</span>
+                                <span style='font-size:20px;color:#880e4f;font-weight:bold'> {blank_sentence}</span><br>
+                                <span style='color:#888;font-size:13px'>{w.get("example_vn","")}</span>
+                            </div>
+                            """, unsafe_allow_html=True)
                             choices = opts_f.get(w['id'], [w['hanzi']])
                             st.radio("_", options=choices, key=f"fa_{ex_level}_{w['id']}",
                                      horizontal=True, label_visibility="collapsed")
@@ -869,20 +833,16 @@ elif page == "📝 Bài tập luyện tập":
                         icon = "✅" if r['ok'] else "❌"
                         bg = "#e8f5e9" if r['ok'] else "#fce4ec"
                         border = "#66bb6a" if r['ok'] else "#e91e8c"
-                        col_card, col_spk = st.columns([11, 1])
-                        with col_card:
-                            st.markdown(f"""
-                            <div style='background:{bg};border-left:4px solid {border};
-                                        border-radius:0 10px 10px 0;padding:10px 16px;margin:6px 0'>
-                                {icon} <span style='font-size:18px;color:#880e4f'>{r['blank']}</span><br>
-                                <span style='color:#555'>Bạn chọn: <strong style='font-size:18px;color:#c2185b'>{r['user']}</strong>
-                                {"" if r['ok'] else " ❌"}</span><br>
-                                <span style='color:#2e7d32'>Câu đúng: <strong style='font-size:18px'>{r['full']}</strong></span>
-                                {"<br><span style='color:#888;font-size:13px'>" + r['vn'] + "</span>" if r['vn'] else ""}
-                            </div>
-                            """, unsafe_allow_html=True)
-                        with col_spk:
-                            tts_button(r['hanzi'])
+                        st.markdown(f"""
+                        <div style='background:{bg};border-left:4px solid {border};
+                                    border-radius:0 10px 10px 0;padding:10px 16px;margin:6px 0'>
+                            {icon} <span style='font-size:18px;color:#880e4f'>{r['blank']}</span><br>
+                            <span style='color:#555'>Bạn chọn: <strong style='font-size:18px;color:#c2185b'>{r['user']}</strong>
+                            {"" if r['ok'] else " ❌"}</span><br>
+                            <span style='color:#2e7d32'>Câu đúng: <strong style='font-size:18px'>{r['full']}</strong></span>
+                            {"<br><span style='color:#888;font-size:13px'>" + r['vn'] + "</span>" if r['vn'] else ""}
+                        </div>
+                        """, unsafe_allow_html=True)
                     if st.button("🔄 Làm lại", key=f"fr_redo_{ex_level}", use_container_width=True):
                         st.session_state[WF] = _rnd.sample(words_with_ex, min(10, len(words_with_ex)))
                         st.session_state[SF] = False
@@ -919,17 +879,12 @@ elif page == "📝 Bài tập luyện tập":
             if not st.session_state.get(SM, False):
                 with st.form(f"mc_{ex_level}"):
                     for i, w in enumerate(mw):
-                        col_h, col_spk = st.columns([8, 1])
-                        with col_h:
-                            st.markdown(f"""
-                            <div style='background:#fce4ec;border-radius:10px;padding:10px 16px;margin:8px 0'>
-                                <span style='font-size:30px;color:#c2185b;font-weight:bold'>{w['hanzi']}</span>
-                                <span style='color:#e91e8c;margin-left:10px;font-size:16px'>{w['pinyin']}</span>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        with col_spk:
-                            st.markdown("<div style='margin-top:14px'></div>", unsafe_allow_html=True)
-                            tts_button(w['hanzi'])
+                        st.markdown(f"""
+                        <div style='background:#fce4ec;border-radius:10px;padding:10px 16px;margin:8px 0'>
+                            <span style='font-size:30px;color:#c2185b;font-weight:bold'>{w['hanzi']}</span>
+                            <span style='color:#e91e8c;margin-left:10px;font-size:16px'>{w['pinyin']}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
                         opts = opts_map.get(w['id'], [w['meaning']])
                         st.radio("_", options=opts, key=f"mc_{ex_level}_{w['id']}",
                                  label_visibility="collapsed")
@@ -1008,18 +963,13 @@ elif page == "📝 Bài tập luyện tập":
                         info = tokens_map.get(w['id'], {})
                         shuffled = info.get("shuffled", [w['hanzi']])
                         display = " / ".join(shuffled)
-                        col_q, col_spk = st.columns([10, 1])
-                        with col_q:
-                            st.markdown(f"""
-                            <div style='background:#fce4ec;border-radius:10px;padding:12px 16px;margin:6px 0'>
-                                <span style='color:#555;font-size:13px'>{i+1}.</span>
-                                <span style='font-size:20px;color:#c2185b;font-weight:bold'> {display}</span><br>
-                                <span style='color:#888;font-size:13px'>{w.get("example_vn","")}</span>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        with col_spk:
-                            st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
-                            tts_button(w['example_zh'])
+                        st.markdown(f"""
+                        <div style='background:#fce4ec;border-radius:10px;padding:12px 16px;margin:6px 0'>
+                            <span style='color:#555;font-size:13px'>{i+1}.</span>
+                            <span style='font-size:20px;color:#c2185b;font-weight:bold'> {display}</span><br>
+                            <span style='color:#888;font-size:13px'>{w.get("example_vn","")}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
                         st.text_input("_", key=f"gm_{ex_level}_{w['id']}",
                                       placeholder="Nhập câu đúng (không cần dấu câu)...",
                                       label_visibility="collapsed")
@@ -1053,20 +1003,16 @@ elif page == "📝 Bài tập luyện tập":
                     icon = "✅" if r['ok'] else "❌"
                     bg = "#e8f5e9" if r['ok'] else "#fce4ec"
                     border = "#66bb6a" if r['ok'] else "#e91e8c"
-                    col_card, col_spk = st.columns([11, 1])
-                    with col_card:
-                        st.markdown(f"""
-                        <div style='background:{bg};border-left:4px solid {border};
-                                    border-radius:0 10px 10px 0;padding:10px 16px;margin:6px 0'>
-                            {icon} <span style='color:#555'>Bạn nhập:
-                            <strong style='color:#c2185b'>{r['user'] or "(để trống)"}</strong></span><br>
-                            <span style='color:#2e7d32'>Câu đúng:
-                            <strong style='font-size:18px'>{r['correct']}</strong></span>
-                            {"<br><span style='color:#888;font-size:13px'>" + r['vn'] + "</span>" if r['vn'] else ""}
-                        </div>
-                        """, unsafe_allow_html=True)
-                    with col_spk:
-                        tts_button(r['hanzi'])
+                    st.markdown(f"""
+                    <div style='background:{bg};border-left:4px solid {border};
+                                border-radius:0 10px 10px 0;padding:10px 16px;margin:6px 0'>
+                        {icon} <span style='color:#555'>Bạn nhập:
+                        <strong style='color:#c2185b'>{r['user'] or "(để trống)"}</strong></span><br>
+                        <span style='color:#2e7d32'>Câu đúng:
+                        <strong style='font-size:18px'>{r['correct']}</strong></span>
+                        {"<br><span style='color:#888;font-size:13px'>" + r['vn'] + "</span>" if r['vn'] else ""}
+                    </div>
+                    """, unsafe_allow_html=True)
                 if st.button("🔄 Làm lại", key=f"match_redo_{ex_level}", use_container_width=True):
                     del st.session_state[WG]
                     st.rerun()
