@@ -237,19 +237,22 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def tts_button(hanzi: str):
-    """Phát âm qua Youdao dictionary audio.
-    Dùng st.markdown onclick trong trang chính — tránh giới hạn iframe của iOS Safari."""
+    """Phát âm tiếng Trung: speechSynthesis (iOS/desktop) + Youdao audio fallback."""
     encoded = urllib.parse.quote(hanzi)
-    # Youdao dictionary TTS: audio MP3 chất lượng tốt, không cần xác thực
     url = f"https://dict.youdao.com/dictvoice?audio={encoded}&type=1"
-    # Fallback: Google Translate TTS
-    url2 = f"https://translate.google.com/translate_tts?ie=UTF-8&q={encoded}&tl=zh-CN&client=tw-ob"
+    hanzi_js = hanzi.replace("\\", "\\\\").replace("'", "\\'")
+    onclick = (
+        f"(function(){{"
+        f"if('speechSynthesis' in window){{"
+        f"var u=new SpeechSynthesisUtterance('{hanzi_js}');"
+        f"u.lang='zh-CN';u.rate=0.8;"
+        f"window.speechSynthesis.cancel();"
+        f"window.speechSynthesis.speak(u);"
+        f"}}else{{new Audio('{url}').play().catch(function(){{}});}}"
+        f"}})();"
+    )
     st.markdown(
-        f'<button onclick="(function(){{'
-        f'var a=new Audio(\'{url}\');'
-        f'a.onerror=function(){{new Audio(\'{url2}\').play();}};'
-        f'a.play().catch(function(){{new Audio(\'{url2}\').play();}});'
-        f'}})();" '
+        f'<button onclick="{onclick}" '
         f'style="background:none;border:none;font-size:22px;cursor:pointer;'
         f'padding:4px 8px;border-radius:8px;vertical-align:middle;" '
         f'title="Phát âm">🔊</button>',
