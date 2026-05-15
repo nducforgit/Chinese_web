@@ -1,7 +1,9 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from google import genai
 import os
-import urllib.parse
+import io
+import base64
 
 os.environ["DATABASE_URL"] = st.secrets["DATABASE_URL"]
 _gemini_key = st.secrets["GEMINI_API_KEY"]
@@ -236,28 +238,33 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+@st.cache_data(show_spinner=False)
+def _tts_b64(text: str) -> str:
+    """Server-side TTS via gTTS → base64 MP3. Cached per unique text."""
+    try:
+        from gtts import gTTS
+        buf = io.BytesIO()
+        gTTS(text=text, lang='zh-cn', slow=False).write_to_fp(buf)
+        return base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        return ""
+
+
 def tts_button(hanzi: str):
-    """Phát âm tiếng Trung: speechSynthesis (iOS/desktop) + Youdao audio fallback."""
-    encoded = urllib.parse.quote(hanzi)
-    url = f"https://dict.youdao.com/dictvoice?audio={encoded}&type=1"
-    hanzi_js = hanzi.replace("\\", "\\\\").replace("'", "\\'")
-    onclick = (
-        f"(function(){{"
-        f"if('speechSynthesis' in window){{"
-        f"var u=new SpeechSynthesisUtterance('{hanzi_js}');"
-        f"u.lang='zh-CN';u.rate=0.8;"
-        f"window.speechSynthesis.cancel();"
-        f"window.speechSynthesis.speak(u);"
-        f"}}else{{new Audio('{url}').play().catch(function(){{}});}}"
-        f"}})();"
-    )
-    st.markdown(
-        f'<button onclick="{onclick}" '
-        f'style="background:none;border:none;font-size:22px;cursor:pointer;'
-        f'padding:4px 8px;border-radius:8px;vertical-align:middle;" '
-        f'title="Phát âm">🔊</button>',
-        unsafe_allow_html=True
-    )
+    """Phát âm tiếng Trung qua gTTS (server-side) nhúng vào components.html.
+    Dùng data URL để tránh CORS; dùng components.html để onclick không bị Streamlit lọc."""
+    b64 = _tts_b64(hanzi)
+    if b64:
+        html = (
+            "<style>*{margin:0;padding:0}</style>"
+            f'<audio id="a" src="data:audio/mpeg;base64,{b64}"></audio>'
+            "<button onclick=\"var a=document.getElementById('a');a.currentTime=0;a.play();\" "
+            "style=\"background:none;border:none;font-size:22px;cursor:pointer;"
+            "padding:4px 8px;border-radius:8px;\">🔊</button>"
+        )
+    else:
+        html = "<button disabled style=\"background:none;border:none;font-size:22px;opacity:0.3;\">🔊</button>"
+    components.html(html, height=46)
 
 # --- Sidebar ---
 with st.sidebar:
